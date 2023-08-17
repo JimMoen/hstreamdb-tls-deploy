@@ -1,0 +1,190 @@
+# run command
+# $ mkdir ca
+# $ env step_ca=$PWD/ca docker compose -f docker-compose-tls.yaml up --build
+
+version: "3.9"
+
+services:
+  step-ca:
+    image: smallstep/step-ca:0.23.0
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - ${step_ca}:/home/step
+    environment:
+      - DOCKER_STEPCA_INIT_NAME=HStream
+      - DOCKER_STEPCA_INIT_DNS_NAMES=step-ca
+
+  generate-hstream-cert:
+    image: smallstep/step-ca:0.23.0
+    depends_on:
+      step-ca:
+        condition: service_healthy
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - ${step_ca}:/home/step
+    command:
+      - bash
+      - "-c"
+      - |
+        sleep 1
+        if [ -f hstream.crt ]; then exit 0; fi
+        step ca certificate "hstream" hstream.crt hstream.key \
+        --provisioner-password-file secrets/password --ca-url https://step-ca:9000 \
+        --root certs/root_ca.crt --san localhost --san 127.0.0.1
+
+  hserver0:
+    image: hstreamdb/hstream:v0.16.1
+    depends_on:
+      - generate-hstream-cert
+      - zookeeper
+      - hstore
+    ports:
+      - "127.0.0.1:6570:6570"
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+      - data_store:/data/store
+      - ${step_ca}:/data/server
+    command:
+      - bash
+      - "-c"
+      - |
+        set -e
+        /usr/local/script/wait-for-storage.sh hstore 6440 zookeeper 2181 600; \
+        timeout=60; \
+        until ( \
+           [ -f /data/server/hstream.crt ] && [ -f /data/server/hstream.key ] \
+        ) >/dev/null 2>&1; do
+            >&2 echo 'Waiting for tls files ...'
+            sleep 1
+            timeout=$$((timeout - 1))
+            [ $$timeout -le 0 ] && echo 'Timeout!' && exit 1;
+        done; \
+        /usr/local/bin/hstream-server \
+        --bind-address 0.0.0.0 --port 26570 \
+        --internal-port 6571 \
+        --server-id 100 \
+        --seed-nodes "hserver0:6571,hserver1:6573" \
+        --advertised-address $$(hostname -I | awk '{print $$1}') \
+        --metastore-uri zk://zookeeper:2181 \
+        --store-config /data/store/logdevice.conf \
+        --store-admin-host hstore --store-admin-port 6440 \
+        --io-tasks-path /tmp/io/tasks \
+        --io-tasks-network 0815-hstream-quickstart \
+        --tls-cert-path /data/server/hstream.crt \
+        --tls-key-path /data/server/hstream.key \
+        --advertised-listeners l1:hstream://127.0.0.1:6570 \
+        --listeners-security-protocol-map l1:tls
+
+  hserver1:
+    image: hstreamdb/hstream:v0.16.1
+    depends_on:
+      - zookeeper
+      - hstore
+    ports:
+      - "127.0.0.1:6572:6572"
+    expose:
+      - 6572
+      - 26572
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp:/tmp
+      - data_store:/data/store
+      - ${step_ca}:/data/server
+    command:
+      - bash
+      - "-c"
+      - |
+        set -e
+        /usr/local/script/wait-for-storage.sh hstore 6440 zookeeper 2181 600; \
+        timeout=60; \
+        until ( \
+           [ -f /data/server/hstream.crt ] && [ -f /data/server/hstream.key ] \
+        ) >/dev/null 2>&1; do
+            >&2 echo 'Waiting for tls files ...'
+            sleep 1
+            timeout=$$((timeout - 1))
+            [ $$timeout -le 0 ] && echo 'Timeout!' && exit 1;
+        done; \
+        /usr/local/bin/hstream-server \
+        --bind-address 0.0.0.0 --port 26572 \
+        --internal-port 6573 \
+        --server-id 101 \
+        --seed-nodes "hserver0:6571,hserver1:6573" \
+        --advertised-address $$(hostname -I | awk '{print $$1}') \
+        --metastore-uri zk://zookeeper:2181 \
+        --store-config /data/store/logdevice.conf \
+        --store-admin-host hstore --store-admin-port 6440 \
+        --io-tasks-path /tmp/io/tasks \
+        --io-tasks-network 0815-hstream-quickstart \
+        --tls-cert-path /data/server/hstream.crt \
+        --tls-key-path /data/server/hstream.key \
+        --advertised-listeners l1:hstream://127.0.0.1:6572 \
+        --listeners-security-protocol-map l1:tls
+
+  hserver-init:
+    image: hstreamdb/hstream:v0.16.1
+    depends_on:
+      - hserver0
+      - hserver1
+    networks:
+      - 0815-hstream-quickstart
+    command:
+      - bash
+      - "-c"
+      - |
+        timeout=60
+        until ( \
+            /usr/local/bin/hadmin server --host hserver0 --port 26570 status && \
+            /usr/local/bin/hadmin server --host hserver1 --port 26572 status \
+        ) >/dev/null 2>&1; do
+            >&2 echo 'Waiting for servers ...'
+            sleep 1
+            timeout=$$((timeout - 1))
+            [ $$timeout -le 0 ] && echo 'Timeout!' && exit 1;
+        done; \
+        /usr/local/bin/hadmin server --host hserver0 --port 26570 init
+
+  hstore:
+    image: hstreamdb/hstream:v0.16.1
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - data_store:/data/store
+    command:
+      - bash
+      - "-c"
+      - |
+        set -ex
+        /usr/local/bin/ld-dev-cluster --root /data/store \
+        --use-tcp --tcp-host $$(hostname -I | awk '{print $$1}') \
+        --user-admin-port 6440 \
+        --no-interactive
+
+  zookeeper:
+    image: zookeeper
+    expose:
+      - 2181
+    networks:
+      - 0815-hstream-quickstart
+    volumes:
+      - data_zk_data:/data
+      - data_zk_datalog:/datalog
+
+networks:
+  0815-hstream-quickstart:
+    name: 0815-hstream-quickstart
+
+volumes:
+  data_store:
+    name: 0815_quickstart_data_store
+  data_zk_data:
+    name: 0815_quickstart_data_zk_data
+  data_zk_datalog:
+    name: 0815_quickstart_data_zk_datalog
