@@ -8,7 +8,7 @@ services:
   step-ca:
     image: smallstep/step-ca:0.23.0
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - ${step_ca}:/home/step
     environment:
@@ -21,7 +21,7 @@ services:
       step-ca:
         condition: service_healthy
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - ${step_ca}:/home/step
     command:
@@ -43,7 +43,7 @@ services:
     ports:
       - "127.0.0.1:6570:6570"
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
@@ -74,7 +74,7 @@ services:
         --store-config /data/store/logdevice.conf \
         --store-admin-host hstore --store-admin-port 6440 \
         --io-tasks-path /tmp/io/tasks \
-        --io-tasks-network 0815-hstream-quickstart \
+        --io-tasks-network hstreamdb-tls-deploy \
         --tls-cert-path /data/server/hstream.crt \
         --tls-key-path /data/server/hstream.key \
         --advertised-listeners l1:hstream://127.0.0.1:6570 \
@@ -91,7 +91,7 @@ services:
       - 6572
       - 26572
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
@@ -122,7 +122,7 @@ services:
         --store-config /data/store/logdevice.conf \
         --store-admin-host hstore --store-admin-port 6440 \
         --io-tasks-path /tmp/io/tasks \
-        --io-tasks-network 0815-hstream-quickstart \
+        --io-tasks-network hstreamdb-tls-deploy \
         --tls-cert-path /data/server/hstream.crt \
         --tls-key-path /data/server/hstream.key \
         --advertised-listeners l1:hstream://127.0.0.1:6572 \
@@ -134,7 +134,7 @@ services:
       - hserver0
       - hserver1
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     command:
       - bash
       - "-c"
@@ -154,7 +154,7 @@ services:
   hstore:
     image: hstreamdb/hstream:v0.16.1
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - data_store:/data/store
     command:
@@ -172,14 +172,14 @@ services:
     expose:
       - 2181
     networks:
-      - 0815-hstream-quickstart
+      - hstreamdb-tls-deploy
     volumes:
       - data_zk_data:/data
       - data_zk_datalog:/datalog
 
 networks:
-  0815-hstream-quickstart:
-    name: 0815-hstream-quickstart
+  hstreamdb-tls-deploy:
+    name: hstreamdb-tls-deploy
 
 volumes:
   data_store:
