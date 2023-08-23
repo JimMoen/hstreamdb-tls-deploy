@@ -168,7 +168,7 @@ services:
         --no-interactive
 
   zookeeper:
-    image: zookeeper
+    image: zookeeper:3.8.1
     expose:
       - 2181
     networks:
