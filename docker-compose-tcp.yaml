@@ -14,7 +14,7 @@ services:
     expose:
       - 6670
     networks:
-      - 0815-hstream-quickstart-tcp
+      - hstreamdb-tls-deploy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
@@ -36,12 +36,12 @@ services:
         --store-admin-host hstore --store-admin-port 6440 \
         --store-log-level warning \
         --io-tasks-path /tmp/io/tasks \
-        --io-tasks-network 0815-hstream-quickstart-tcp
+        --io-tasks-network hstreamdb-tls-deploy
 
   hstore:
     image: hstreamdb/hstream:v0.16.1
     networks:
-      - 0815-hstream-quickstart-tcp
+      - hstreamdb-tls-deploy
     volumes:
       - data_store:/data/store
     command:
@@ -58,18 +58,18 @@ services:
         --no-interactive
 
   zookeeper:
-    image: zookeeper
+    image: zookeeper:3.8.1
     expose:
       - 2181
     networks:
-      - 0815-hstream-quickstart-tcp
+      - hstreamdb-tls-deploy
     volumes:
       - data_zk_data:/data
       - data_zk_datalog:/datalog
 
 networks:
-  0815-hstream-quickstart-tcp:
-    name: 0815-hstream-quickstart-tcp
+  hstreamdb-tls-deploy:
+    name: hstreamdb-tls-deploy
 
 volumes:
   data_store:
