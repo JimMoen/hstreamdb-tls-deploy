@@ -1,6 +1,6 @@
 # run command
-# $ mkdir ca
-# $ env step_ca=$PWD/ca docker compose -f docker-compose-tls.yaml up --build
+# $ mkdir ../ca
+# $ env step_ca=$PWD/../ca docker compose -f docker-compose-tls.yaml up --build
 
 version: "3.9"
 
@@ -32,10 +32,16 @@ services:
         if [ -f hstream.crt ]; then exit 0; fi
         step ca certificate "hstream" hstream.crt hstream.key \
         --provisioner-password-file secrets/password --ca-url https://step-ca:9000 \
-        --root certs/root_ca.crt --san localhost --san 127.0.0.1
+        --root certs/root_ca.crt \
+        --san localhost \
+        --san 127.0.0.1 \
+        --san 172.100.0.10 \
+        --san 172.100.0.11 \
+        --san tls-1-hserver0-1 \
+        --san tls-1-hserver1-1
 
   hserver0:
-    image: hstreamdb/hstream:v0.16.1
+    image: hstreamdb/hstream:v0.17.0
     depends_on:
       - generate-hstream-cert
       - zookeeper
@@ -43,7 +49,8 @@ services:
     ports:
       - "127.0.0.1:6570:6570"
     networks:
-      - hstreamdb-tls-deploy
+      hstreamdb-tls-deploy:
+        ipv4_address: 172.100.0.10
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
@@ -77,11 +84,14 @@ services:
         --io-tasks-network hstreamdb-tls-deploy \
         --tls-cert-path /data/server/hstream.crt \
         --tls-key-path /data/server/hstream.key \
-        --advertised-listeners l1:hstream://127.0.0.1:6570 \
+        --advertised-listeners l1:hstream://172.100.0.10:6570 \
         --listeners-security-protocol-map l1:tls
 
+        # NOTE:
+        # advertised-listeners ip addr should same as container addr for tls listener
+
   hserver1:
-    image: hstreamdb/hstream:v0.16.1
+    image: hstreamdb/hstream:v0.17.0
     depends_on:
       - zookeeper
       - hstore
@@ -91,7 +101,8 @@ services:
       - 6572
       - 26572
     networks:
-      - hstreamdb-tls-deploy
+      hstreamdb-tls-deploy:
+        ipv4_address: 172.100.0.11
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /tmp:/tmp
@@ -125,11 +136,14 @@ services:
         --io-tasks-network hstreamdb-tls-deploy \
         --tls-cert-path /data/server/hstream.crt \
         --tls-key-path /data/server/hstream.key \
-        --advertised-listeners l1:hstream://127.0.0.1:6572 \
+        --advertised-listeners l1:hstream://172.100.0.11:6572 \
         --listeners-security-protocol-map l1:tls
 
+        # NOTE:
+        # advertised-listeners ip addr should same as container addr for tls listener
+
   hserver-init:
-    image: hstreamdb/hstream:v0.16.1
+    image: hstreamdb/hstream:v0.17.0
     depends_on:
       - hserver0
       - hserver1
@@ -141,8 +155,8 @@ services:
       - |
         timeout=60
         until ( \
-            /usr/local/bin/hadmin server --host hserver0 --port 26570 status && \
-            /usr/local/bin/hadmin server --host hserver1 --port 26572 status \
+            /usr/local/bin/hadmin server --host 172.100.0.10 --port 26570 status && \
+            /usr/local/bin/hadmin server --host 172.100.0.11 --port 26572 status \
         ) >/dev/null 2>&1; do
             >&2 echo 'Waiting for servers ...'
             sleep 1
@@ -152,7 +166,7 @@ services:
         /usr/local/bin/hadmin server --host hserver0 --port 26570 init
 
   hstore:
-    image: hstreamdb/hstream:v0.16.1
+    image: hstreamdb/hstream:v0.17.0
     networks:
       - hstreamdb-tls-deploy
     volumes:
@@ -179,6 +193,10 @@ services:
 
 networks:
   hstreamdb-tls-deploy:
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.100.0.0/24"
     name: hstreamdb-tls-deploy
 
 volumes:
