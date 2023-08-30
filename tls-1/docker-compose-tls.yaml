@@ -191,6 +191,48 @@ services:
       - data_zk_data:/data
       - data_zk_datalog:/datalog
 
+  emqx-4420-bmw-0:
+    image: emqx-ee-bmw:4.4.20-customized-features-g465e4e9b4
+    container_name: emqx-4420-bmw-0
+    volumes:
+      - emqx_0_data:/opt/emqx/data
+    env_file:
+      - conf.cluster.env
+    environment:
+      - "EMQX_NAME=emqx-bmw-0"
+      - "EMQX_NODE__NAME=emqx-bmw-0@172.100.0.20"
+    networks:
+      hstreamdb-tls-deploy:
+        ipv4_address: 172.100.0.20
+
+  emqx-4420-bmw-1:
+    image: emqx-ee-bmw:4.4.20-customized-features-g465e4e9b4
+    container_name: emqx-4420-bmw-1
+    volumes:
+      - emqx_1_data:/opt/emqx/data
+    env_file:
+      - conf.cluster.env
+    environment:
+      - "EMQX_NAME=emqx-bmw-1"
+      - "EMQX_NODE__NAME=emqx-bmw-1@172.100.0.21"
+    networks:
+      hstreamdb-tls-deploy:
+        ipv4_address: 172.100.0.21
+
+  emqx-4420-bmw-2:
+    image: emqx-ee-bmw:4.4.20-customized-features-g465e4e9b4
+    container_name: emqx-4420-bmw-2
+    env_file:
+      - conf.cluster.env
+    environment:
+      - "EMQX_NAME=emqx-bmw-2"
+      - "EMQX_NODE__NAME=emqx-bmw-2@172.100.0.22"
+    volumes:
+      - emqx_2_data:/opt/emqx/data
+    networks:
+      hstreamdb-tls-deploy:
+        ipv4_address: 172.100.0.22
+
 networks:
   hstreamdb-tls-deploy:
     ipam:
@@ -201,8 +243,14 @@ networks:
 
 volumes:
   data_store:
-    name: 0815_quickstart_data_store
+    name: tls_quickstart_data_store
   data_zk_data:
-    name: 0815_quickstart_data_zk_data
+    name: tls_quickstart_data_zk_data
   data_zk_datalog:
-    name: 0815_quickstart_data_zk_datalog
+    name: tls_quickstart_data_zk_datalog
+  emqx_0_data:
+    name: tls_emqx_0_data
+  emqx_1_data:
+    name: tls_emqx_1_data
+  emqx_2_data:
+    name: tls_emqx_2_data
